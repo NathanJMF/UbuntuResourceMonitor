@@ -2,6 +2,8 @@
 
 Ubuntu Resource Monitor is a Linux desktop resource monitor based on [GNOME Resources](https://gitlab.gnome.org/GNOME/Incubator/Resources). This unofficial fork of Resources 1.10.2 adds live top-process rankings to the hardware views so you can see which processes are driving resource usage.
 
+![Processor view in dark mode with physical-core charts, temperature, and a ranked process table](docs/screenshots/processor.png)
+
 ## What's different
 
 - See the top 10 processes for CPU, memory, GPU, disk, network, and supported NPUs. Where the table has multiple metrics, use **Rank by** to switch between them.
@@ -10,6 +12,8 @@ Ubuntu Resource Monitor is a Linux desktop resource monitor based on [GNOME Reso
 - Search is always visible in Apps and Processes. **Ctrl+F** focuses it and **Esc** clears it. The Processes view keeps its scroll position as rows reorder.
 
 Drive rankings use system-wide per-process disk I/O. Network rankings cover visible TCP connections and match them to interfaces by local address. The network sampler uses `ss` from iproute2 and covers TCP only.
+
+![Memory view in dark mode with RAM and swap charts and a ranked process table](docs/screenshots/memory.png)
 
 ## Build and run
 
