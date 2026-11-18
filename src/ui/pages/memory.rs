@@ -8,6 +8,8 @@ use crate::utils::FiniteOr;
 use crate::utils::memory::{MemoryData, MemoryDevice};
 use crate::utils::units::convert_storage;
 
+use super::top_processes::{self, Metric, ProcessRow, Ranking, TopTable};
+
 pub const TAB_ID: &str = "memory";
 
 mod imp {
@@ -27,6 +29,9 @@ mod imp {
     #[template(resource = "/net/nokyan/Resources/ui/pages/memory.ui")]
     #[properties(wrapper_type = super::ResMemory)]
     pub struct ResMemory {
+        #[template_child]
+        pub top_memory: TemplateChild<adw::PreferencesGroup>,
+        pub top_table: std::cell::OnceCell<TopTable>,
         #[template_child]
         pub memory: TemplateChild<ResGraphBox>,
         #[template_child]
@@ -89,6 +94,8 @@ mod imp {
     impl Default for ResMemory {
         fn default() -> Self {
             Self {
+                top_memory: Default::default(),
+                top_table: Default::default(),
                 memory: Default::default(),
                 swap: Default::default(),
                 authentication_banner: Default::default(),
@@ -180,6 +187,32 @@ impl ResMemory {
     }
 
     pub fn init(&self) {
+        let imp = self.imp();
+        imp.top_table.get_or_init(|| {
+            TopTable::new(
+                &imp.top_memory,
+                vec![
+                    Metric {
+                        title: "Memory",
+                        format: top_processes::storage,
+                    },
+                    Metric {
+                        title: "Swap",
+                        format: top_processes::storage,
+                    },
+                ],
+                vec![
+                    Ranking {
+                        title: "Memory",
+                        value: top_processes::first,
+                    },
+                    Ranking {
+                        title: "Swap",
+                        value: top_processes::second,
+                    },
+                ],
+            )
+        });
         self.setup_widgets();
         self.setup_signals();
     }
@@ -290,6 +323,29 @@ impl ResMemory {
                 imp.authentication_banner.set_revealed(false);
             }
         ));
+    }
+
+    pub(in crate::ui) fn refresh_top_processes(&self, processes: &crate::utils::app::AppsContext) {
+        let rows = processes
+            .processes_iter()
+            .map(|process| {
+                let values = {
+                    vec![
+                        Some(process.data.memory_usage as f64),
+                        Some(process.data.swap_usage as f64),
+                    ]
+                };
+                ProcessRow {
+                    pid: process.data.pid,
+                    starttime: process.data.starttime,
+                    name: process.display_name.clone(),
+                    values,
+                }
+            })
+            .collect();
+        if let Some(table) = self.imp().top_table.get() {
+            table.set_rows(rows);
+        }
     }
 
     pub fn refresh_page(&self, memdata: MemoryData) {

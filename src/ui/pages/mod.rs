@@ -13,6 +13,7 @@ pub mod memory;
 pub mod network;
 pub mod npu;
 pub mod processes;
+mod top_processes;
 
 const APPLICATIONS_PRIMARY_ORD: u32 = 0;
 const PROCESSES_PRIMARY_ORD: u32 = 1;

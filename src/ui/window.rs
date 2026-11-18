@@ -24,6 +24,7 @@ use crate::utils::drive::{Drive, DriveData};
 use crate::utils::gpu::{Gpu, GpuData};
 use crate::utils::memory::MemoryData;
 use crate::utils::network::{NetworkData, NetworkInterface};
+use crate::utils::network_processes::{InterfaceRates, Sampler};
 use crate::utils::npu::{Npu, NpuData};
 use crate::utils::process::{Process, ProcessAction};
 use crate::utils::settings::SETTINGS;
@@ -71,6 +72,8 @@ mod imp {
         #[template_child]
         pub split_view: TemplateChild<adw::OverlaySplitView>,
         #[template_child]
+        pub hardware_toast_overlay: TemplateChild<adw::ToastOverlay>,
+        #[template_child]
         pub processor_window_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
         pub resources_sidebar: TemplateChild<ResStackSidebar>,
@@ -85,13 +88,13 @@ mod imp {
         #[template_child]
         pub apps_page: TemplateChild<gtk::StackPage>,
         #[template_child]
-        pub apps_search_button: TemplateChild<gtk::ToggleButton>,
+        pub apps_header: TemplateChild<adw::HeaderBar>,
         #[template_child]
         pub processes: TemplateChild<ResProcesses>,
         #[template_child]
         pub processes_page: TemplateChild<gtk::StackPage>,
         #[template_child]
-        pub processes_search_button: TemplateChild<gtk::ToggleButton>,
+        pub processes_header: TemplateChild<adw::HeaderBar>,
         #[template_child]
         pub memory: TemplateChild<ResMemory>,
         #[template_child]
@@ -125,14 +128,15 @@ mod imp {
                 network_pages: RefCell::default(),
                 battery_pages: RefCell::default(),
                 split_view: TemplateChild::default(),
+                hardware_toast_overlay: TemplateChild::default(),
                 resources_sidebar: TemplateChild::default(),
                 content_stack: TemplateChild::default(),
                 apps: TemplateChild::default(),
                 apps_page: TemplateChild::default(),
-                apps_search_button: TemplateChild::default(),
+                apps_header: TemplateChild::default(),
                 processes: TemplateChild::default(),
                 processes_page: TemplateChild::default(),
-                processes_search_button: TemplateChild::default(),
+                processes_header: TemplateChild::default(),
                 cpu: TemplateChild::default(),
                 cpu_page: TemplateChild::default(),
                 memory: TemplateChild::default(),
@@ -177,6 +181,21 @@ mod imp {
                 ));
             }
 
+            let style = adw::StyleManager::for_display(&obj.upcast_ref::<gtk::Widget>().display());
+            obj.update_dark_palette(&style);
+            style.connect_notify_local(
+                None,
+                clone!(
+                    #[weak]
+                    obj,
+                    move |style, property| {
+                        if matches!(property.name(), "dark" | "high-contrast") {
+                            obj.update_dark_palette(style);
+                        }
+                    }
+                ),
+            );
+
             // Load latest window state
             obj.load_window_size();
         }
@@ -219,12 +238,21 @@ struct RefreshData {
     drive_data: Vec<DriveData>,
     network_paths: Vec<PathBuf>,
     network_data: Vec<NetworkData>,
+    network_rates: InterfaceRates,
     battery_paths: Vec<PathBuf>,
     battery_data: Vec<BatteryData>,
     process_data: Vec<ProcessData>,
 }
 
 impl MainWindow {
+    fn update_dark_palette(&self, style: &adw::StyleManager) {
+        if style.is_dark() && !style.is_high_contrast() {
+            self.add_css_class("resources-dark");
+        } else {
+            self.remove_css_class("resources-dark");
+        }
+    }
+
     pub fn new(app: &Application) -> Self {
         trace!("Creating MainWindow GObject…");
 
@@ -316,27 +344,9 @@ impl MainWindow {
     fn setup_signals(&self) {
         let imp = self.imp();
 
-        imp.apps
-            .search_bar()
-            .bind_property(
-                "search-mode-enabled",
-                &imp.apps_search_button.get(),
-                "active",
-            )
-            .sync_create()
-            .bidirectional()
-            .build();
-
-        imp.processes
-            .search_bar()
-            .bind_property(
-                "search-mode-enabled",
-                &imp.processes_search_button.get(),
-                "active",
-            )
-            .sync_create()
-            .bidirectional()
-            .build();
+        imp.apps_header.pack_start(imp.apps.search_entry());
+        imp.processes_header
+            .pack_start(imp.processes.search_entry());
 
         imp.content_stack.connect_visible_child_notify(clone!(
             #[weak]
@@ -396,16 +406,64 @@ impl MainWindow {
             .and_then(|toolbar| toolbar.content())
     }
 
-    pub fn shortcut_toggle_search(&self) {
+    pub fn shortcut_focus_search(&self) {
         let imp = self.imp();
 
         let selected_page = self.get_selected_page().unwrap();
 
         if selected_page.is::<ResApplications>() {
-            imp.apps.toggle_search();
+            imp.apps.search_entry().grab_focus();
         } else if selected_page.is::<ResProcesses>() {
-            imp.processes.toggle_search();
+            imp.processes.search_entry().grab_focus();
         }
+    }
+
+    pub(in crate::ui) fn stop_ranked_process(&self, pid: i32, starttime: u64) {
+        if pid <= 0 || pid as u32 == std::process::id() {
+            return;
+        }
+
+        let name = self
+            .imp()
+            .apps_context
+            .borrow()
+            .get_process(pid)
+            .filter(|process| process.data.starttime == starttime)
+            .map(|process| process.display_name.clone());
+        let Some(name) = name else {
+            self.imp()
+                .hardware_toast_overlay
+                .add_toast(Toast::new(&i18n("That process is no longer available")));
+            return;
+        };
+
+        let title = super::pages::processes::get_action_name(ProcessAction::STOP, &name);
+        super::pages::processes::confirm_process_action(
+            self,
+            &title,
+            ProcessAction::STOP,
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move || {
+                    let imp = this.imp();
+                    let context = imp.apps_context.borrow();
+                    let message = match context
+                        .get_process(pid)
+                        .filter(|process| process.data.starttime == starttime)
+                    {
+                        Some(process)
+                            if process.execute_process_action(ProcessAction::STOP).is_ok() =>
+                        {
+                            get_action_success(ProcessAction::STOP, &name)
+                        }
+                        Some(_) => get_named_action_failure(ProcessAction::STOP, &name),
+                        None => i18n("That process is no longer available"),
+                    };
+                    imp.hardware_toast_overlay.add_toast(Toast::new(&message));
+                }
+            ),
+        );
     }
 
     pub fn shortcut_manipulate_app_process(&self, process_action: ProcessAction) {
@@ -516,7 +574,12 @@ impl MainWindow {
         npus
     }
 
-    fn gather_refresh_data(logical_cpus: usize, gpus: &[Gpu], npus: &[Npu]) -> RefreshData {
+    fn gather_refresh_data(
+        logical_cpus: usize,
+        gpus: &[Gpu],
+        npus: &[Npu],
+        network_rates: InterfaceRates,
+    ) -> RefreshData {
         let start = Instant::now();
 
         trace!("Gathering refresh data of all devices…");
@@ -612,6 +675,7 @@ impl MainWindow {
             drive_data,
             network_paths,
             network_data,
+            network_rates,
             battery_paths,
             battery_data,
             process_data,
@@ -638,6 +702,7 @@ impl MainWindow {
             drive_data,
             network_paths,
             network_data,
+            network_rates,
             battery_paths,
             battery_data,
             process_data,
@@ -655,6 +720,12 @@ impl MainWindow {
             trace!("Skipping visual apps and processes updates");
             imp.apps.refresh_apps_list(&apps_context);
             imp.processes.refresh_processes_list(&apps_context);
+            if imp.cpu.is_mapped() {
+                imp.cpu.refresh_top_processes(&apps_context);
+            }
+            if imp.memory.is_mapped() {
+                imp.memory.refresh_top_processes(&apps_context);
+            }
         }
 
         /*
@@ -713,6 +784,9 @@ impl MainWindow {
             }
 
             page.refresh_page(&gpu_data);
+            if !imp.pause_updates.get() && page.is_mapped() {
+                page.refresh_top_processes(&apps_context, gpu_data.gpu_identifier);
+            }
         }
 
         /*
@@ -737,9 +811,10 @@ impl MainWindow {
             }
 
             page.refresh_page(&npu_data);
+            if !imp.pause_updates.get() && page.is_mapped() {
+                page.refresh_top_processes(&apps_context, npu_data.pci_slot);
+            }
         }
-
-        std::mem::drop(apps_context);
 
         /*
          * Cpu
@@ -775,6 +850,9 @@ impl MainWindow {
             let page = drive_pages.get(&drive_data.inner.sysfs_path).unwrap();
             let page = page.content().and_downcast::<ResDrive>().unwrap();
 
+            if !imp.pause_updates.get() && page.is_mapped() {
+                page.refresh_top_processes(&apps_context);
+            }
             page.refresh_page(drive_data);
         }
 
@@ -794,6 +872,11 @@ impl MainWindow {
             let page = network_pages.get(&network_data.inner.sysfs_path).unwrap();
             let page = page.content().and_downcast::<ResNetwork>().unwrap();
 
+            if !imp.pause_updates.get() && page.is_mapped() {
+                if let Some(interface) = network_data.inner.interface_name.to_str() {
+                    page.refresh_top_processes(&apps_context, &network_rates, interface);
+                }
+            }
             page.refresh_page(network_data);
         }
 
@@ -848,13 +931,16 @@ impl MainWindow {
         std::thread::spawn(move || {
             trace!("Spawning refresh thread");
 
+            let mut sampler = Sampler::default();
+            let mut watch_network = false;
             loop {
-                let data = Self::gather_refresh_data(logical_cpus, &gpus, &npus);
+                let rates = sampler.sample(watch_network);
+                let data = Self::gather_refresh_data(logical_cpus, &gpus, &npus, rates);
                 tx_data.send(data).unwrap();
 
                 // Wait on delay so we don't gather data multiple times in a short time span
                 // Which usually just yields the same data and makes changes appear delayed by (up to) multiple refreshes
-                rx_wait.recv().unwrap();
+                watch_network = rx_wait.recv().unwrap();
             }
         });
 
@@ -902,7 +988,11 @@ impl MainWindow {
             timeout_future(Duration::from_secs_f32(total_delay - gather_time)).await;
 
             // Tell other threads to start gathering data
-            tx_wait.send(()).unwrap();
+            let watch_network = !ARGS.disable_process_monitoring
+                && self
+                    .get_selected_page()
+                    .is_some_and(|page| page.is::<ResNetwork>());
+            tx_wait.send(watch_network).unwrap();
 
             timeout_future(Duration::from_secs_f32(gather_time)).await;
         }

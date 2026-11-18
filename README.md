@@ -1,126 +1,38 @@
-# Resources
+# Ubuntu Resource Monitor
 
-<a href='https://flathub.org/apps/net.nokyan.Resources'><img width='240' alt='Download on Flathub' src='https://flathub.org/api/badge?svg&locale=en'/></a>
+Ubuntu Resource Monitor is a Linux desktop resource monitor based on [GNOME Resources](https://gitlab.gnome.org/GNOME/Incubator/Resources). This unofficial fork of Resources 1.10.2 adds live top-process rankings to the hardware views so you can see which processes are driving resource usage.
 
-[![GNOME Circle](https://circle.gnome.org/assets/button/badge.svg
-)](https://apps.gnome.org/app/net.nokyan.Resources/) [![Please do not theme this app](https://stopthemingmy.app/badge.svg)](https://stopthemingmy.app)  
+## What's different
 
-Resources is a simple yet powerful monitor for your system resources and processes, written in Rust and using GTK 4 and libadwaita for its GUI. It’s capable of displaying usage and details of your CPU, memory, GPUs, NPUs, network interfaces and block devices. It’s also capable of listing and terminating running graphical applications as well as processes.
+- See the top 10 processes for CPU, memory, GPU, disk, network, and supported NPUs. Where the table has multiple metrics, use **Rank by** to switch between them.
+- Click the CPU usage chart or its heading to cycle through total usage, physical cores, and logical threads.
+- Hold **Ctrl** to freeze a hardware process table. Use **Stop Process** to suspend a selected process and **Continue Process** in the Processes view to resume it.
+- Search is always visible in Apps and Processes. **Ctrl+F** focuses it and **Esc** clears it. The Processes view keeps its scroll position as rows reorder.
 
-Resources is *not* a program that will try to display every single possible piece of information about each tiny part of your device. Instead, it aims to strike a balance between information richness, user-friendliness and a balanced user interface — showing you most of the information most of you need most of the time.
+Drive rankings use system-wide per-process disk I/O. Network rankings cover visible TCP connections and match them to interfaces by local address. The network sampler uses `ss` from iproute2 and covers TCP only.
 
-<details>
-  <summary><b>Click me for screenshots!</b></summary>
+## Build and run
 
-  ![Apps View](data/resources/screenshots/1.png?raw=true "Apps View")
+You need Meson, Ninja, gettext, Rust and Cargo (Rust 1.85 or later), and development files for GLib (2.66+), GTK (4.12+), and libadwaita (1.8+).
 
-  ![Processes View](data/resources/screenshots/2.png?raw=true "Processes View")
-
-  ![Processor View](data/resources/screenshots/3.png?raw=true "Processor View")
-
-  ![Memory View](data/resources/screenshots/4.png?raw=true "Memory View")
-
-  ![GPU View](data/resources/screenshots/5.png?raw=true "GPU View")
-
-  ![Drive View](data/resources/screenshots/6.png?raw=true "Drive View")
-
-  ![Network Interface View](data/resources/screenshots/7.png?raw=true "Network Interface View")
-
-  ![Battery View](data/resources/screenshots/8.png?raw=true "Battery View")
-  
-</details>
-
-## Installing
-
-The **official** and **only supported** way of installing Resources is using Flatpak. Simply use your graphical software manager like GNOME Software or Discover to install Resources from Flathub or type ``flatpak install flathub net.nokyan.Resources`` in your terminal.
-Please keep in mind that you need to have Flathub set up on your device. You can find out how to set up Flathub [here](https://flathub.org/setup).
-
-### Unofficial Packages
-
-Resources has been packaged for some Linux distributions by volunteers. Keep in mind that these are not supported.
-If you’re packaging Resources for another distribution, feel free to send a pull request to add your package to this list!
-
-#### Arch Linux
-
-Unofficially packaged in the [extra](https://archlinux.org/packages/extra/x86_64/resources/) repository.
-
-You can install Resources using `pacman` with no further configuration required.
+From a checkout of this repository, build and install to a dedicated per-user prefix.
 
 ```sh
-pacman -S resources
+prefix="${XDG_DATA_HOME:-$HOME/.local/share}/ubuntu-resource-monitor"
+meson setup build --prefix="$prefix" -Dprofile=default
+meson compile -C build
+meson install -C build
 ```
 
-#### Fedora
-
-Unofficially packaged in [Copr](https://copr.fedorainfracloud.org/coprs/atim/resources/) for Fedora 39 and newer.
-
-You first need to enable the `atim/resources` Copr repository and then use `dnf` to install Resources.
+Run the installed app with its own schemas and data files.
 
 ```sh
-dnf copr enable atim/resources
-dnf install resources
+prefix="${XDG_DATA_HOME:-$HOME/.local/share}/ubuntu-resource-monitor"
+GSETTINGS_SCHEMA_DIR="$prefix/share/glib-2.0/schemas" \
+XDG_DATA_DIRS="$prefix/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" \
+"$prefix/bin/resources"
 ```
 
-#### Nix
+## Licence
 
-Unofficially packaged for Nix/NixOS. The Flatpak version is [known to have issues](https://github.com/nokyan/resources/issues/76) with showing running apps and processes on NixOS, which the native package may resolve.
-
-In `configuration.nix`:
-```
-environment.systemPackages = [
-  pkgs.resources
-];
-```
-
-## Building
-
-You can also build Resources yourself using either Meson directly or preferably using Flatpak Builder.
-
-### Build Dependencies
-
-- `glib-2.0` ≥ 2.66
-- `gio-2.0` ≥ 2.66
-- `gtk-4` ≥ 4.12
-- `libadwaita-1` ≥ 1.8
-- `cargo`
-
-Other dependencies are handled by `cargo`.
-Resources’ minimum supported Rust version (MSRV) is **1.85.0**.
-
-### Runtime Dependencies
-
-These dependencies are not needed to build Resources but Resources may lack certain functionalities when they are not present.
-
-- `systemd` (needed for app detection using cgroups)
-- `polkit` (needed for executing privileged actions like killing certain processes)
-
-### Building Using Flatpak Builder
-
-```sh
-flatpak install org.gnome.Sdk//49 org.freedesktop.Sdk.Extension.rust-stable//25.08 org.gnome.Platform//49 org.freedesktop.Sdk.Extension.llvm21//25.08
-flatpak-builder --user flatpak_app build-aux/net.nokyan.Resources.Devel.json
-```
-
-If you use [GNOME Builder](https://apps.gnome.org/app/org.gnome.Builder/) or Visual Studio Code with the [Flatpak extension](https://marketplace.visualstudio.com/items?itemName=bilelmoussaoui.flatpak-vscode), Resources can be built and run automatically.
-
-### Building Natively Using Meson
-
-```sh
-meson . build --prefix=/usr/local
-ninja -C build install
-```
-
-## Running
-
-Running Resources is as simple as typing `flatpak run net.nokyan.Resources` into a terminal or running it from your app launcher.
-If you’ve built Resources natively or installed it from a traditional package manager such as `apt` or `dnf`, or if you’ve built Resources yourself, typing `resources` in a terminal will start Resources.
-If you’ve built Resources as a Flatpak, type `flatpak-builder --run flatpak_app build-aux/net.nokyan.Resources.Devel.json resources` into your terminal or use one of the aforementioned IDEs to do that automatically.
-
-## Contributing
-
-If you have an idea, bug report, question or something else, don’t hesitate to [open an issue](https://github.com/nokyan/resources/issues)! Translations are always welcome but need to go through [GNOME Damned Lies](https://l10n.gnome.org/module/resources/), ordinary pull requests for translation changes cannot be accepted anymore.
-
-## Code of Conduct
-
-Resources follows the [GNOME Code of Conduct](/CODE_OF_CONDUCT.md).
-All communications in project spaces are expected to follow it.
+This fork is licensed under [GNU GPL version 3 or later](LICENSE). It includes modifications to Resources 1.10.2 made on 9–10 November 2026. See the [upstream source at the base revision](https://github.com/nokyan/resources/tree/b99edbf) for the original project.

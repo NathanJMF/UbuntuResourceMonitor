@@ -3,7 +3,7 @@ use glob::glob;
 use lazy_regex::{Lazy, Regex, lazy_regex};
 use log::{debug, trace, warn};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -116,6 +116,7 @@ impl CpuData {
 
         let temperature = get_temperature();
 
+        let logical_cpus = logical_cpus.max(new_thread_usages.len());
         let mut frequencies = Vec::with_capacity(logical_cpus);
 
         for i in 0..logical_cpus {
@@ -287,12 +288,22 @@ fn parse_proc_stat_line<S: AsRef<str>>(line: S) -> Result<(u64, u64)> {
 fn parse_proc_stat<S: AsRef<str>>(stat: S) -> Vec<Result<(u64, u64)>> {
     trace!("Parsing {PROC_STAT}…");
 
-    stat.as_ref()
-        .lines()
-        .skip(1)
-        .filter(|line| line.starts_with("cpu"))
-        .map(parse_proc_stat_line)
-        .collect()
+    let mut usage = Vec::new();
+    for line in stat.as_ref().lines() {
+        let Some(id) = line
+            .split_whitespace()
+            .next()
+            .and_then(|label| label.strip_prefix("cpu"))
+            .and_then(|id| id.parse::<usize>().ok())
+        else {
+            continue;
+        };
+        if id >= usage.len() {
+            usage.resize_with(id + 1, || Err(anyhow!("CPU is offline")));
+        }
+        usage[id] = parse_proc_stat_line(line);
+    }
+    usage
 }
 
 /// Returns the CPU usage of either all cores combined (if supplied argument is `None`),
@@ -312,6 +323,23 @@ pub fn get_cpu_usage() -> Vec<Result<(u64, u64)>> {
         .unwrap_or_default();
 
     parse_proc_stat(raw)
+}
+
+/// Group logical CPU IDs using the kernel's sibling lists.
+pub fn physical_core_threads(logical_cpus: usize) -> Vec<Vec<usize>> {
+    let mut cores = BTreeMap::<String, Vec<usize>>::new();
+    for id in 0..logical_cpus {
+        let path = format!("/sys/devices/system/cpu/cpu{id}/topology/thread_siblings_list");
+        if let Ok(siblings) = std::fs::read_to_string(path) {
+            let siblings = siblings.trim();
+            if !siblings.is_empty() {
+                cores.entry(siblings.to_owned()).or_default().push(id);
+            }
+        }
+    }
+    let mut cores: Vec<_> = cores.into_values().collect();
+    cores.sort_unstable_by_key(|threads| threads[0]);
+    cores
 }
 
 /// Returns the CPU temperature.
@@ -339,7 +367,7 @@ fn read_sysfs_thermal<P: AsRef<Path>>(path: P) -> Result<f32> {
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::utils::cpu::CpuInfo;
+    use super::{CpuInfo, parse_proc_stat};
 
     const LSCPU_OUTPUT: &str = concat!(
         "Architecture:             x86_64\n",
@@ -372,6 +400,20 @@ mod test {
         "  NUMA node(s):           1\n",
         "  NUMA node0 CPU(s):      0-15\n",
     );
+
+    #[test]
+    fn proc_stat_preserves_cpu_ids_across_offline_threads() {
+        let usage = parse_proc_stat(concat!(
+            "cpu 30 0 0 100 0 0 0 0 0 0\n",
+            "cpu0 10 0 0 50 0 0 0 0 0 0\n",
+            "cpu2 20 0 0 50 0 0 0 0 0 0\n",
+        ));
+
+        assert_eq!(usage.len(), 3);
+        assert_eq!(usage[0].as_ref().unwrap(), &(50, 60));
+        assert!(usage[1].is_err());
+        assert_eq!(usage[2].as_ref().unwrap(), &(50, 70));
+    }
 
     #[test]
     fn lscpu_complex() {

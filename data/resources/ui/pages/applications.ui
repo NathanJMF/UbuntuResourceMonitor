@@ -47,19 +47,16 @@
       <property name="name">popover_menu</property>
       <property name="menu-model">app_context_menu</property>
     </object>
+    <object class="GtkSearchEntry" id="search_entry">
+      <property name="valign">center</property>
+      <property name="width-chars">12</property>
+      <property name="placeholder-text" translatable="yes">Search applications</property>
+      <accessibility>
+        <property name="label" translatable="yes">Search applications</property>
+      </accessibility>
+    </object>
     <property name="child">
       <object class="AdwToolbarView">
-        <child type="top">
-          <object class="GtkSearchBar" id="search_bar">
-            <property name="child">
-              <object class="GtkSearchEntry" id="search_entry">
-                <accessibility>
-                  <property name="label" translatable="yes">Search applications</property>
-                </accessibility>
-              </object>
-            </property>
-          </object>
-        </child>
         <property name="content">
           <object class="AdwToastOverlay" id="toast_overlay">
             <child>

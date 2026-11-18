@@ -9,7 +9,7 @@ use async_channel::Sender;
 use gtk::accessible::Property;
 use gtk::glib::{self, MainContext, Object, clone, closure};
 use gtk::{
-    ColumnView, ColumnViewColumn, EventControllerKey, FilterChange, ListItem, NumericSorter,
+    ColumnView, ColumnViewColumn, FilterChange, ListItem, NumericSorter,
     SortType, StringSorter, Widget, gio,
 };
 
@@ -52,8 +52,6 @@ mod imp {
         pub toast_overlay: TemplateChild<adw::ToastOverlay>,
         #[template_child]
         pub popover_menu: TemplateChild<gtk::PopoverMenu>,
-        #[template_child]
-        pub search_bar: TemplateChild<gtk::SearchBar>,
         #[template_child]
         pub search_entry: TemplateChild<gtk::SearchEntry>,
         #[template_child]
@@ -114,7 +112,6 @@ mod imp {
             Self {
                 toast_overlay: Default::default(),
                 popover_menu: Default::default(),
-                search_bar: Default::default(),
                 search_entry: Default::default(),
                 information_button: Default::default(),
                 store: gio::ListStore::new::<ApplicationEntry>().into(),
@@ -297,17 +294,6 @@ impl ResApplications {
         glib::Object::new::<Self>()
     }
 
-    pub fn toggle_search(&self) {
-        let imp = self.imp();
-        imp.search_bar
-            .set_search_mode(!imp.search_bar.is_search_mode());
-    }
-
-    pub fn close_search(&self) {
-        let imp = self.imp();
-        imp.search_bar.set_search_mode(false);
-    }
-
     pub fn init(&self, sender: Sender<Action>) {
         let imp = self.imp();
         imp.sender.set(sender).unwrap();
@@ -441,7 +427,7 @@ impl ResApplications {
                 }
             ));
 
-        imp.search_bar
+        imp.search_entry
             .set_key_capture_widget(self.parent().as_ref());
 
         imp.search_entry.connect_search_changed(clone!(
@@ -455,17 +441,10 @@ impl ResApplications {
             }
         ));
 
-        let event_controller = EventControllerKey::new();
-        event_controller.connect_key_released(clone!(
-            #[weak(rename_to = this)]
-            self,
-            move |_, key, _, _| {
-                if key.name().unwrap_or_default() == "Escape" {
-                    this.close_search();
-                }
-            }
-        ));
-        imp.search_bar.add_controller(event_controller);
+        imp.search_entry.connect_search_started(|entry| {
+            entry.grab_focus();
+        });
+        imp.search_entry.connect_stop_search(|entry| entry.set_text(""));
 
         imp.information_button.connect_clicked(clone!(
             #[weak(rename_to = this)]
@@ -527,8 +506,8 @@ impl ResApplications {
         }
     }
 
-    pub fn search_bar(&self) -> &gtk::SearchBar {
-        &self.imp().search_bar
+    pub fn search_entry(&self) -> &gtk::SearchEntry {
+        &self.imp().search_entry
     }
 
     pub fn open_info_dialog(&self, app: &ApplicationEntry) {
@@ -564,8 +543,7 @@ impl ResApplications {
         let imp = self.imp();
         let item = obj.downcast_ref::<ApplicationEntry>().unwrap();
         let search_string = imp.search_entry.text().to_string().to_lowercase();
-        !imp.search_bar.is_search_mode()
-            || item.name().to_lowercase().contains(&search_string)
+        item.name().to_lowercase().contains(&search_string)
             || item
                 .id()
                 .is_some_and(|id| id.to_lowercase().contains(&search_string))

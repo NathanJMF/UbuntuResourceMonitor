@@ -14,6 +14,7 @@ pub mod gpu;
 pub mod link;
 pub mod memory;
 pub mod network;
+pub mod network_processes;
 pub mod npu;
 pub mod os;
 pub mod pci;

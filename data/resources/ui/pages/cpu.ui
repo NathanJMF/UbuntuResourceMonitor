@@ -2,152 +2,240 @@
 <interface>
   <template class="ResCPU" parent="AdwBin">
     <property name="child">
-      <object class="GtkScrolledWindow">
-        <child>
-          <object class="AdwClamp">
-            <property name="maximum-size">768</property>
+      <object class="AdwBreakpointBin">
+        <property name="width-request">220</property>
+        <property name="height-request">100</property>
+        <property name="vexpand">true</property>
+        <property name="child">
+          <object class="GtkScrolledWindow">
             <child>
-              <object class="GtkBox">
-                <property name="margin-top">24</property>
-                <property name="margin-bottom">24</property>
-                <property name="margin-start">16</property>
-                <property name="margin-end">16</property>
-                <property name="spacing">24</property>
-                <property name="orientation">vertical</property>
-                <property name="hexpand">true</property>
-                <property name="valign">start</property>
-                <property name="vexpand">true</property>
+              <object class="AdwClamp">
+                <property name="maximum-size">1440</property>
+                <property name="tightening-threshold">1440</property>
                 <child>
-                  <object class="AdwPreferencesGroup">
-                    <property name="title" translatable="yes">Options</property>
+                  <object class="GtkBox">
+                    <property name="margin-top">24</property>
+                    <property name="margin-bottom">24</property>
+                    <property name="margin-start">16</property>
+                    <property name="margin-end">16</property>
+                    <property name="spacing">24</property>
+                    <property name="orientation">vertical</property>
+                    <property name="hexpand">true</property>
+                    <property name="valign">start</property>
+                    <property name="vexpand">true</property>
                     <child>
-                      <object class="AdwSwitchRow" id="logical_switch">
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Show Usages of Logical CPUs</property>
-                        <property name="sensitive">false</property>
-                      </object>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkStack" id="stack">
-                    <property name="vhomogeneous">0</property>
-                    <child>
-                      <object class="AdwPreferencesGroup" id="total_page">
-                        <property name="title" translatable="yes">Usage</property>
-                        <child>
-                          <object class="ResGraphBox" id="total_cpu"/>
-                        </child>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkBox" id="logical_page">
+                      <object class="GtkBox" id="hardware_columns">
                         <property name="orientation">vertical</property>
-                        <property name="spacing">16</property>
-                        <property name="margin-top">6</property>
+                        <property name="spacing">24</property>
                         <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">Usage</property>
-                            <property name="xalign">0</property>
-                            <style>
-                              <class name="heading"/>
-                              <class name="h4"/>
-                            </style>
+                          <object class="GtkBox" id="details_column">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">24</property>
+                            <property name="valign">start</property>
+                            <property name="hexpand">true</property>
+                            <child>
+                              <object class="AdwPreferencesGroup">
+                                <property name="title" translatable="yes">Properties</property>
+                                <child>
+                                  <object class="AdwActionRow" id="max_speed">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Max Frequency</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="logical_cpus">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Logical Cores</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="physical_cpus">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Physical Cores</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="sockets">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Sockets</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="uptime">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Uptime</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="virtualization">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Virtualization</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="architecture">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Architecture</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="vexpand">true</property>
+                                <property name="spacing">12</property>
+                                <property name="orientation">vertical</property>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="xalign">0</property>
+                                    <property name="label" translatable="yes">Sensors</property>
+                                    <style>
+                                      <class name="heading"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="ResGraphBox" id="temperature">
+                                    <property name="vexpand">true</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
                           </object>
                         </child>
                         <child>
-                          <object class="GtkFlowBox" id="thread_box">
-                            <accessibility>
-                              <property name="label">CPU usage by logical processors</property>
-                            </accessibility>
-                            <property name="row_spacing">6</property>
-                            <property name="column_spacing">6</property>
-                            <property name="homogeneous">true</property>
-                            <property name="selection-mode">none</property>
+                          <object class="GtkBox" id="charts_column">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">24</property>
+                            <property name="valign">start</property>
+                            <property name="hexpand">true</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">vertical</property>
+                                <property name="spacing">8</property>
+                                <property name="vexpand">true</property>
+                                <child>
+                                  <object class="GtkButton" id="usage_heading">
+                                    <property name="label" translatable="yes">Usage — Total</property>
+                                    <property name="tooltip-text" translatable="yes">Click to switch CPU usage view</property>
+                                    <property name="halign">start</property>
+                                    <style>
+                                      <class name="flat"/>
+                                      <class name="heading"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkStack" id="stack">
+                                    <property name="vexpand">true</property>
+                                    <property name="vhomogeneous">true</property>
+                                    <child>
+                                      <object class="GtkBox" id="total_page">
+                                        <property name="vexpand">true</property>
+                                        <property name="spacing">12</property>
+                                        <property name="orientation">vertical</property>
+                                        <child>
+                                          <object class="ResGraphBox" id="total_cpu">
+                                            <property name="vexpand">true</property>
+                                          </object>
+                                        </child>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkBox" id="logical_page">
+                                        <property name="orientation">vertical</property>
+                                        <property name="spacing">16</property>
+                                        <child>
+                                          <object class="GtkFlowBox" id="thread_box">
+                                            <accessibility>
+                                              <property name="label">CPU usage by logical processors</property>
+                                            </accessibility>
+                                            <property name="row-spacing">8</property>
+                                            <property name="column-spacing">8</property>
+                                            <property name="homogeneous">true</property>
+                                            <property name="selection-mode">none</property>
+                                            <property name="max-children-per-line">4</property>
+                                            <property name="vexpand">true</property>
+                                            <style>
+                                              <class name="cpu-usage-grid"/>
+                                            </style>
+                                          </object>
+                                        </child>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkBox" id="physical_page">
+                                        <property name="orientation">vertical</property>
+                                        <child>
+                                          <object class="GtkFlowBox" id="core_box">
+                                            <property name="row-spacing">8</property>
+                                            <property name="column-spacing">8</property>
+                                            <property name="homogeneous">true</property>
+                                            <property name="selection-mode">none</property>
+                                            <property name="max-children-per-line">4</property>
+                                            <property name="vexpand">true</property>
+                                            <style>
+                                              <class name="cpu-usage-grid"/>
+                                            </style>
+                                          </object>
+                                        </child>
+                                        <child>
+                                          <object class="GtkLabel" id="no_topology">
+                                            <property name="label" translatable="yes">Physical core topology is unavailable</property>
+                                            <property name="xalign">0</property>
+                                          </object>
+                                        </child>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>
                     </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="AdwPreferencesGroup">
-                    <property name="title" translatable="yes">Sensors</property>
                     <child>
-                      <object class="ResGraphBox" id="temperature"/>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="AdwPreferencesGroup">
-                    <property name="title" translatable="yes">Properties</property>
-                    <child>
-                      <object class="AdwActionRow" id="max_speed">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Max Frequency</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="logical_cpus">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Logical Cores</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="physical_cpus">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Physical Cores</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="sockets">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Sockets</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="uptime">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Uptime</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="virtualization">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Virtualization</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="architecture">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Architecture</property>
+                      <object class="AdwPreferencesGroup" id="top_cpu">
+                        <property name="title" translatable="yes">Top Processes by CPU Usage</property>
                       </object>
                     </child>
                   </object>
                 </child>
               </object>
             </child>
+          </object>
+        </property>
+        <child>
+          <object class="AdwBreakpoint">
+            <condition>min-width: 960sp</condition>
+            <setter object="hardware_columns" property="orientation">horizontal</setter>
+            <setter object="details_column" property="hexpand">false</setter>
+            <setter object="details_column" property="width-request">320</setter>
+            <setter object="charts_column" property="valign">fill</setter>
+            <setter object="thread_box" property="min-children-per-line">4</setter>
+            <setter object="core_box" property="min-children-per-line">4</setter>
           </object>
         </child>
       </object>

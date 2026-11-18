@@ -7,20 +7,24 @@
     <property name="width-request">160</property>
     <child type="suffix">
       <object class="GtkBox">
+        <property name="homogeneous">true</property>
+        <property name="vexpand">true</property>
         <property name="orientation">horizontal</property>
-        <property name="margin-start">12</property>
-        <property name="margin-end">12</property>
-        <property name="margin-top">12</property>
-        <property name="margin-bottom">6</property>
         <property name="spacing">12</property>
         <property name="hexpand">true</property>
         <child>
           <object class="GtkBox">
+            <style>
+              <class name="card"/>
+              <class name="resource-graph-card"/>
+            </style>
+            <property name="vexpand">true</property>
             <property name="orientation">vertical</property>
             <property name="hexpand">true</property>
             <property name="spacing">12</property>
             <child>
               <object class="ResGraph" id="start_graph">
+                <property name="vexpand">true</property>
                 <style>
                   <class name="graph"/>
                 </style>
@@ -58,11 +62,17 @@
         </child>
         <child>
           <object class="GtkBox">
+            <style>
+              <class name="card"/>
+              <class name="resource-graph-card"/>
+            </style>
+            <property name="vexpand">true</property>
             <property name="orientation">vertical</property>
             <property name="hexpand">true</property>
             <property name="spacing">12</property>
             <child>
               <object class="ResGraph" id="end_graph">
+                <property name="vexpand">true</property>
                 <style>
                   <class name="graph"/>
                 </style>

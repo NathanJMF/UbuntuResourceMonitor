@@ -1,7 +1,9 @@
 pub mod process_entry;
 mod process_name_cell;
 
+use std::cell::Cell;
 use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::LazyLock;
 
 use adw::ResponseAppearance;
@@ -10,8 +12,8 @@ use async_channel::Sender;
 use gtk::accessible::Property;
 use gtk::glib::{self, MainContext, Object, clone, closure};
 use gtk::{
-    BitsetIter, ColumnView, ColumnViewColumn, EventControllerKey, FilterChange, ListItem,
-    NumericSorter, SortType, StringSorter, Widget, gio,
+    BitsetIter, ColumnView, ColumnViewColumn, FilterChange, ListItem, NumericSorter, SortType,
+    StringSorter, Widget, gio,
 };
 use process_data::Niceness;
 
@@ -82,8 +84,6 @@ mod imp {
         #[template_child]
         pub popover_menu_multiple: TemplateChild<gtk::PopoverMenu>,
         #[template_child]
-        pub search_bar: TemplateChild<gtk::SearchBar>,
-        #[template_child]
         pub search_entry: TemplateChild<gtk::SearchEntry>,
         #[template_child]
         pub processes_scrolled_window: TemplateChild<gtk::ScrolledWindow>,
@@ -102,6 +102,7 @@ mod imp {
         pub filter_model: RefCell<gtk::FilterListModel>,
         pub sort_model: RefCell<gtk::SortListModel>,
         pub column_view: RefCell<gtk::ColumnView>,
+        pub pending_scroll_offset: Cell<Option<f64>>,
 
         pub open_info_dialog: RefCell<Option<(i32, ResProcessDialog)>>,
         pub open_options_dialog: RefCell<Option<(i32, ResProcessOptionsDialog)>>,
@@ -153,7 +154,6 @@ mod imp {
                 toast_overlay: Default::default(),
                 popover_menu: Default::default(),
                 popover_menu_multiple: Default::default(),
-                search_bar: Default::default(),
                 search_entry: Default::default(),
                 processes_scrolled_window: Default::default(),
                 options_button: Default::default(),
@@ -166,6 +166,7 @@ mod imp {
                 filter_model: Default::default(),
                 sort_model: Default::default(),
                 column_view: Default::default(),
+                pending_scroll_offset: Default::default(),
                 open_info_dialog: Default::default(),
                 open_options_dialog: Default::default(),
                 info_dialog_closed: Default::default(),
@@ -371,17 +372,6 @@ impl ResProcesses {
         glib::Object::new::<Self>()
     }
 
-    pub fn toggle_search(&self) {
-        let imp = self.imp();
-        imp.search_bar
-            .set_search_mode(!imp.search_bar.is_search_mode());
-    }
-
-    pub fn close_search(&self) {
-        let imp = self.imp();
-        imp.search_bar.set_search_mode(false);
-    }
-
     pub fn init(&self, sender: Sender<Action>) {
         let imp = self.imp();
         imp.sender.set(sender).unwrap();
@@ -535,7 +525,7 @@ impl ResProcesses {
                 }
             ));
 
-        imp.search_bar
+        imp.search_entry
             .set_key_capture_widget(self.parent().as_ref());
 
         imp.search_entry.connect_search_changed(clone!(
@@ -549,17 +539,11 @@ impl ResProcesses {
             }
         ));
 
-        let event_controller = EventControllerKey::new();
-        event_controller.connect_key_released(clone!(
-            #[weak(rename_to = this)]
-            self,
-            move |_, key, _, _| {
-                if key.name().unwrap_or_default() == "Escape" {
-                    this.close_search();
-                }
-            }
-        ));
-        imp.search_entry.add_controller(event_controller);
+        imp.search_entry.connect_search_started(|entry| {
+            entry.grab_focus();
+        });
+        imp.search_entry
+            .connect_stop_search(|entry| entry.set_text(""));
 
         imp.options_button.connect_clicked(clone!(
             #[weak(rename_to = this)]
@@ -626,13 +610,17 @@ impl ResProcesses {
                             .find(|(_, column)| column.as_ptr() as usize == current_column)
                             .map_or(3, |(i, _)| i as u32); // 3 corresponds to the memory column
 
-                        if SETTINGS.processes_sort_by() != current_column_number {
+                        let order = sorter.primary_sort_order();
+                        let column_changed = SETTINGS.processes_sort_by() != current_column_number;
+                        let order_changed = SETTINGS.processes_sort_by_ascending() != order;
+                        if column_changed || order_changed {
+                            this.preserve_scroll_offset();
+                        }
+                        if column_changed {
                             let _ = SETTINGS.set_processes_sort_by(current_column_number);
                         }
-
-                        if SETTINGS.processes_sort_by_ascending() != sorter.primary_sort_order() {
-                            let _ = SETTINGS
-                                .set_processes_sort_by_ascending(sorter.primary_sort_order());
+                        if order_changed {
+                            let _ = SETTINGS.set_processes_sort_by_ascending(order);
                         }
                     }
                 }
@@ -640,8 +628,8 @@ impl ResProcesses {
         }
     }
 
-    pub fn search_bar(&self) -> &gtk::SearchBar {
-        &self.imp().search_bar
+    pub fn search_entry(&self) -> &gtk::SearchEntry {
+        &self.imp().search_entry
     }
 
     pub fn open_options_dialog(&self, process: &ProcessEntry) {
@@ -710,10 +698,9 @@ impl ResProcesses {
         let lowered_search_entry_text = imp.search_entry.text().to_lowercase();
         let search_strings: Vec<&str> = lowered_search_entry_text.split('|').collect();
 
-        !imp.search_bar.is_search_mode()
-            || search_strings.iter().any(|search_string| {
-                item_name.contains(search_string) || item_commandline.contains(search_string)
-            })
+        search_strings.iter().any(|search_string| {
+            item_name.contains(search_string) || item_commandline.contains(search_string)
+        })
     }
 
     pub fn get_selected_process_entries(&self) -> Vec<ProcessEntry> {
@@ -746,7 +733,41 @@ impl ResProcesses {
         }
     }
 
+    fn preserve_scroll_offset(&self) {
+        let imp = self.imp();
+        let scroller = &imp.processes_scrolled_window;
+        if !scroller.is_mapped() || imp.pending_scroll_offset.get().is_some() {
+            return;
+        }
+        let Some(clock) = scroller.frame_clock() else {
+            return;
+        };
+
+        // GTK anchors the viewport to an item during a reorder. Restore the
+        // scroll offset after GTK has laid out the newly ordered rows.
+        imp.pending_scroll_offset
+            .set(Some(scroller.vadjustment().value()));
+        let handler = Rc::new(Cell::new(None));
+        let handler_for_callback = Rc::clone(&handler);
+        let this = self.downgrade();
+        handler.set(Some(clock.connect_after_paint(move |clock| {
+            if let Some(id) = handler_for_callback.take() {
+                clock.disconnect(id);
+            }
+            if let Some(this) = this.upgrade() {
+                let imp = this.imp();
+                if let Some(offset) = imp.pending_scroll_offset.take() {
+                    imp.processes_scrolled_window
+                        .vadjustment()
+                        .set_value(offset);
+                }
+            }
+        })));
+        clock.request_phase(gtk::gdk::FrameClockPhase::AFTER_PAINT);
+    }
+
     pub fn refresh_processes_list(&self, apps_context: &AppsContext) {
+        self.preserve_scroll_offset();
         let imp = self.imp();
 
         if imp.info_dialog_closed.get() {
@@ -861,58 +882,27 @@ impl ResProcesses {
             get_action_name_multiple(action, processes.len())
         };
 
-        // Confirmation dialog & warning
-        let dialog = adw::AlertDialog::builder()
-            .heading(action_name)
-            .body(get_action_warning(action))
-            .build();
-
-        dialog.add_response("yes", &get_action_description(action));
-        dialog.set_response_appearance("yes", ResponseAppearance::Destructive);
-
-        dialog.add_response("no", &i18n("Cancel"));
-        dialog.set_default_response(Some("no"));
-        dialog.set_close_response("no");
-
-        // wtf is this
-        dialog.connect_response(
-            None,
+        confirm_process_action(
+            &MainWindow::default(),
+            &action_name,
+            action,
             clone!(
                 #[weak(rename_to = this)]
                 self,
-                #[strong]
-                processes,
-                move |_, response| {
-                    if response == "yes" {
-                        let main_context = MainContext::default();
-                        main_context.spawn_local(clone!(
-                            #[weak]
-                            this,
-                            #[strong]
-                            processes,
-                            async move {
-                                let imp = this.imp();
-                                let _ = imp
-                                    .sender
-                                    .get()
-                                    .unwrap()
-                                    .send(Action::ManipulateProcesses(
-                                        action,
-                                        processes
-                                            .iter()
-                                            .map(process_entry::ProcessEntry::pid)
-                                            .collect(),
-                                        imp.toast_overlay.get(),
-                                    ))
-                                    .await;
-                            }
-                        ));
-                    }
+                move || {
+                    let imp = this.imp();
+                    let request = Action::ManipulateProcesses(
+                        action,
+                        processes.iter().map(ProcessEntry::pid).collect(),
+                        imp.toast_overlay.get(),
+                    );
+                    let sender = imp.sender.get().unwrap().clone();
+                    MainContext::default().spawn_local(async move {
+                        let _ = sender.send(request).await;
+                    });
                 }
             ),
         );
-
-        dialog.present(Some(&MainWindow::default()));
     }
 
     fn add_name_column(&self, column_view: &ColumnView) -> ColumnViewColumn {
@@ -2288,7 +2278,30 @@ impl ResProcesses {
     }
 }
 
-fn get_action_name(action: ProcessAction, name: &str) -> String {
+pub(in crate::ui) fn confirm_process_action(
+    window: &MainWindow,
+    title: &str,
+    action: ProcessAction,
+    confirm: impl Fn() + 'static,
+) {
+    let dialog = adw::AlertDialog::builder()
+        .heading(title)
+        .body(get_action_warning(action))
+        .build();
+    dialog.add_response("yes", &get_action_description(action));
+    dialog.set_response_appearance("yes", ResponseAppearance::Destructive);
+    dialog.add_response("no", &i18n("Cancel"));
+    dialog.set_default_response(Some("no"));
+    dialog.set_close_response("no");
+    dialog.connect_response(None, move |_, response| {
+        if response == "yes" {
+            confirm();
+        }
+    });
+    dialog.present(Some(window));
+}
+
+pub(in crate::ui) fn get_action_name(action: ProcessAction, name: &str) -> String {
     match action {
         ProcessAction::TERM => i18n_f("End {}?", &[name]),
         ProcessAction::STOP => i18n_f("Halt {}?", &[name]),

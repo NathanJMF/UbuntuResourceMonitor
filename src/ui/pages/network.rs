@@ -10,6 +10,8 @@ use gtk::glib;
 use log::trace;
 use plotters::prelude::LogScalable;
 
+use super::top_processes::{self, Metric, ProcessRow, Ranking, TopTable};
+
 pub const TAB_ID_PREFIX: &str = "network";
 
 mod imp {
@@ -29,6 +31,9 @@ mod imp {
     #[template(resource = "/net/nokyan/Resources/ui/pages/network.ui")]
     #[properties(wrapper_type = super::ResNetwork)]
     pub struct ResNetwork {
+        #[template_child]
+        pub top_network: TemplateChild<adw::PreferencesGroup>,
+        pub top_table: std::cell::OnceCell<TopTable>,
         #[template_child]
         pub receiving: TemplateChild<ResGraphBox>,
         #[template_child]
@@ -109,6 +114,8 @@ mod imp {
     impl Default for ResNetwork {
         fn default() -> Self {
             Self {
+                top_network: Default::default(),
+                top_table: Default::default(),
                 receiving: Default::default(),
                 sending: Default::default(),
                 total_received: Default::default(),
@@ -212,6 +219,36 @@ impl ResNetwork {
     }
 
     pub fn init(&self, network_data: &NetworkData, secondary_ord: u32) {
+        let imp = self.imp();
+        imp.top_table.get_or_init(|| {
+            TopTable::new(
+                &imp.top_network,
+                vec![
+                    Metric {
+                        title: "Receive",
+                        format: |value| convert_speed(value, true),
+                    },
+                    Metric {
+                        title: "Send",
+                        format: |value| convert_speed(value, true),
+                    },
+                ],
+                vec![
+                    Ranking {
+                        title: "Total TCP traffic",
+                        value: top_processes::combined,
+                    },
+                    Ranking {
+                        title: "Receive",
+                        value: top_processes::first,
+                    },
+                    Ranking {
+                        title: "Send",
+                        value: top_processes::second,
+                    },
+                ],
+            )
+        });
         self.set_secondary_ord(secondary_ord);
         self.setup_widgets(network_data);
     }
@@ -316,6 +353,31 @@ impl ResNetwork {
             .set(network_data.sent_bytes.as_ref().ok().copied());
 
         imp.set_tab_detail_string(&network_data.display_name);
+    }
+
+    pub(in crate::ui) fn refresh_top_processes(
+        &self,
+        processes: &crate::utils::app::AppsContext,
+        rates: &crate::utils::network_processes::InterfaceRates,
+        interface: &str,
+    ) {
+        let rows = rates
+            .get(interface)
+            .into_iter()
+            .flat_map(|processes| processes.iter())
+            .filter_map(|(&pid, &(received, sent))| {
+                let process = processes.get_process(pid)?;
+                Some(ProcessRow {
+                    pid,
+                    starttime: process.data.starttime,
+                    name: process.display_name.clone(),
+                    values: vec![Some(received), Some(sent)],
+                })
+            })
+            .collect();
+        if let Some(table) = self.imp().top_table.get() {
+            table.set_rows(rows);
+        }
     }
 
     pub fn refresh_page(&self, network_data: NetworkData) {

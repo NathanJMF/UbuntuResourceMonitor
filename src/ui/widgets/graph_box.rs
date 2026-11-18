@@ -92,6 +92,10 @@ impl ResGraphBox {
         imp.info_label.set_label(str);
     }
 
+    pub fn set_subtitle_selectable(&self, selectable: bool) {
+        self.imp().info_label.set_selectable(selectable);
+    }
+
     pub fn set_tooltip(&self, str: Option<&str>) {
         let imp = self.imp();
         imp.info_label.set_tooltip_text(str);

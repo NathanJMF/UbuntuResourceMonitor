@@ -9,6 +9,8 @@ use crate::i18n::{i18n, i18n_f};
 use crate::utils::drive::{Drive, DriveData};
 use crate::utils::units::{convert_speed, convert_storage};
 
+use super::top_processes::{self, Metric, ProcessRow, Ranking, TopTable};
+
 pub const TAB_ID_PREFIX: &str = "drive";
 
 mod imp {
@@ -31,6 +33,9 @@ mod imp {
     #[template(resource = "/net/nokyan/Resources/ui/pages/drive.ui")]
     #[properties(wrapper_type = super::ResDrive)]
     pub struct ResDrive {
+        #[template_child]
+        pub top_drive: TemplateChild<adw::PreferencesGroup>,
+        pub top_table: std::cell::OnceCell<TopTable>,
         #[template_child]
         pub total_usage: TemplateChild<ResGraphBox>,
         #[template_child]
@@ -108,6 +113,8 @@ mod imp {
     impl Default for ResDrive {
         fn default() -> Self {
             Self {
+                top_drive: Default::default(),
+                top_table: Default::default(),
                 total_usage: Default::default(),
                 read_speed: Default::default(),
                 write_speed: Default::default(),
@@ -207,6 +214,36 @@ impl ResDrive {
     }
 
     pub fn init(&self, drive_data: &DriveData, secondary_ord: u32) {
+        let imp = self.imp();
+        imp.top_table.get_or_init(|| {
+            TopTable::new(
+                &imp.top_drive,
+                vec![
+                    Metric {
+                        title: "Read",
+                        format: |value| convert_speed(value, false),
+                    },
+                    Metric {
+                        title: "Write",
+                        format: |value| convert_speed(value, false),
+                    },
+                ],
+                vec![
+                    Ranking {
+                        title: "Total disk I/O",
+                        value: top_processes::combined,
+                    },
+                    Ranking {
+                        title: "Read",
+                        value: top_processes::first,
+                    },
+                    Ranking {
+                        title: "Write",
+                        value: top_processes::second,
+                    },
+                ],
+            )
+        });
         self.set_secondary_ord(secondary_ord);
         self.setup_widgets(drive_data);
     }
@@ -270,6 +307,24 @@ impl ResDrive {
         imp.old_stats
             .borrow_mut()
             .clone_from(&drive_data.disk_stats);
+    }
+
+    pub(in crate::ui) fn refresh_top_processes(&self, processes: &crate::utils::app::AppsContext) {
+        let rows = processes
+            .processes_iter()
+            .map(|process| {
+                let values = { vec![process.read_speed(), process.write_speed()] };
+                ProcessRow {
+                    pid: process.data.pid,
+                    starttime: process.data.starttime,
+                    name: process.display_name.clone(),
+                    values,
+                }
+            })
+            .collect();
+        if let Some(table) = self.imp().top_table.get() {
+            table.set_rows(rows);
+        }
     }
 
     pub fn refresh_page(&self, drive_data: DriveData) {

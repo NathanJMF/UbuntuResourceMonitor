@@ -8,12 +8,28 @@ use log::trace;
 use crate::config::PROFILE;
 use crate::i18n::{i18n, i18n_f};
 use crate::ui::widgets::graph_box::ResGraphBox;
-use crate::utils::cpu::{CpuData, CpuInfo};
+use crate::utils::cpu::{CpuData, CpuInfo, physical_core_threads};
 use crate::utils::settings::SETTINGS;
 use crate::utils::units::{convert_frequency, convert_temperature, format_time_integer};
 use crate::utils::{FiniteOr, NUM_CPUS, boot_time};
 
+use super::top_processes::{self, Metric, ProcessRow, Ranking, TopTable};
+
 pub const TAB_ID: &str = "cpu";
+
+struct CoreTile {
+    graph: ResGraphBox,
+    name: String,
+    threads: Vec<usize>,
+}
+
+#[derive(Clone, Copy, Default)]
+enum UsageMode {
+    #[default]
+    Total,
+    Physical,
+    Logical,
+}
 
 mod imp {
     use std::cell::{Cell, RefCell};
@@ -33,11 +49,21 @@ mod imp {
     #[properties(wrapper_type = super::ResCPU)]
     pub struct ResCPU {
         #[template_child]
-        pub logical_switch: TemplateChild<adw::SwitchRow>,
+        pub top_cpu: TemplateChild<adw::PreferencesGroup>,
+        pub top_table: std::cell::OnceCell<TopTable>,
+        pub(super) usage_mode: Cell<UsageMode>,
+        #[template_child]
+        pub usage_heading: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub physical_page: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub core_box: TemplateChild<gtk::FlowBox>,
+        #[template_child]
+        pub no_topology: TemplateChild<gtk::Label>,
         #[template_child]
         pub stack: TemplateChild<gtk::Stack>,
         #[template_child]
-        pub total_page: TemplateChild<adw::PreferencesGroup>,
+        pub total_page: TemplateChild<gtk::Box>,
         #[template_child]
         pub logical_page: TemplateChild<gtk::Box>,
         #[template_child]
@@ -61,6 +87,7 @@ mod imp {
         #[template_child]
         pub temperature: TemplateChild<ResGraphBox>,
         pub thread_graphs: RefCell<Vec<ResGraphBox>>,
+        pub(super) core_tiles: RefCell<Vec<CoreTile>>,
         pub old_total_usage: Cell<(u64, u64)>,
         pub old_thread_usages: RefCell<Vec<(u64, u64)>>,
         pub logical_cpus_amount: Cell<usize>,
@@ -106,7 +133,13 @@ mod imp {
     impl Default for ResCPU {
         fn default() -> Self {
             Self {
-                logical_switch: Default::default(),
+                top_cpu: Default::default(),
+                top_table: Default::default(),
+                usage_mode: Default::default(),
+                usage_heading: Default::default(),
+                physical_page: Default::default(),
+                core_box: Default::default(),
+                no_topology: Default::default(),
                 stack: Default::default(),
                 total_page: Default::default(),
                 logical_page: Default::default(),
@@ -121,6 +154,7 @@ mod imp {
                 architecture: Default::default(),
                 temperature: Default::default(),
                 thread_graphs: Default::default(),
+                core_tiles: Default::default(),
                 uses_progress_bar: Cell::new(true),
                 main_graph_color: glib::Bytes::from_static(&super::ResCPU::MAIN_GRAPH_COLOR),
                 icon: RefCell::new(ThemedIcon::new("processor-symbolic").into()),
@@ -205,6 +239,20 @@ impl ResCPU {
     }
 
     pub fn init(&self, cpu_info: CpuInfo) {
+        let imp = self.imp();
+        imp.top_table.get_or_init(|| {
+            TopTable::new(
+                &imp.top_cpu,
+                vec![Metric {
+                    title: "CPU usage",
+                    format: top_processes::percentage,
+                }],
+                vec![Ranking {
+                    title: "CPU usage",
+                    value: top_processes::first,
+                }],
+            )
+        });
         self.setup_widgets(cpu_info);
         self.setup_signals();
     }
@@ -222,6 +270,7 @@ impl ResCPU {
             frequencies: _,
         } = CpuData::new(logical_cpus);
 
+        let logical_cpus = logical_cpus.max(new_thread_usages.len());
         let old_total_usage = new_thread_usages
             .iter()
             .flatten()
@@ -240,6 +289,7 @@ impl ResCPU {
         imp.logical_cpus_amount.set(logical_cpus);
 
         imp.total_cpu.set_title_label(&i18n("Total Usage"));
+        imp.total_cpu.set_subtitle_selectable(false);
         imp.total_cpu.set_subtitle(&i18n("N/A"));
         imp.total_cpu.graph().set_graph_color(
             Self::MAIN_GRAPH_COLOR[0],
@@ -247,25 +297,47 @@ impl ResCPU {
             Self::MAIN_GRAPH_COLOR[2],
         );
 
-        // if our CPU happens to only have one thread, showing a single thread box with the exact
-        // same fraction as the progress bar for total CPU usage would be silly, so only do
-        // thread boxes if we have more than one thread
-
-        imp.logical_switch.set_sensitive(logical_cpus > 0);
         for i in 0..logical_cpus {
             let thread_box = ResGraphBox::new();
+            thread_box.set_subtitle_selectable(false);
             thread_box.set_subtitle(&i18n_f("CPU {}", &[&(i + 1).to_string()]));
             thread_box.set_title_label(&i18n("N/A"));
-            thread_box.graph().set_css_classes(&["small-graph"]);
-            thread_box.graph().set_height_request(72);
+            thread_box.add_css_class("compact-cpu");
+            thread_box.set_width_request(96);
+            thread_box.graph().set_height_request(40);
             thread_box.graph().set_graph_color(28, 113, 216);
             let flow_box_chld = FlowBoxChild::builder()
                 .child(&thread_box)
-                .css_classes(vec!["tile", "card"])
                 .can_target(false)
                 .build();
             imp.thread_box.append(&flow_box_chld);
             imp.thread_graphs.borrow_mut().push(thread_box);
+        }
+
+        let core_threads = physical_core_threads(logical_cpus);
+        imp.no_topology.set_visible(core_threads.is_empty());
+        for (index, cpu_ids) in core_threads.into_iter().enumerate() {
+            let graph = ResGraphBox::new();
+            graph.set_subtitle_selectable(false);
+            let name = i18n_f("Core {}", &[&(index + 1).to_string()]);
+            graph.set_title_label(&name);
+            graph.set_subtitle(&i18n("N/A"));
+            graph.add_css_class("compact-cpu");
+            graph.set_width_request(96);
+            graph.graph().set_height_request(40);
+            graph.graph().set_graph_color(28, 113, 216);
+
+            imp.core_box.append(
+                &FlowBoxChild::builder()
+                    .child(&graph)
+                    .can_target(false)
+                    .build(),
+            );
+            imp.core_tiles.borrow_mut().push(CoreTile {
+                graph,
+                name,
+                threads: cpu_ids,
+            });
         }
 
         imp.temperature.set_title_label(&i18n("Temperature"));
@@ -307,22 +379,61 @@ impl ResCPU {
         }
     }
 
+    fn set_usage_mode(&self, mode: UsageMode) {
+        let imp = self.imp();
+        imp.usage_mode.set(mode);
+        let label = match mode {
+            UsageMode::Total => {
+                imp.stack.set_visible_child(&imp.total_page.get());
+                let _ = SETTINGS.set_show_logical_cpus(false);
+                i18n("Total")
+            }
+            UsageMode::Physical => {
+                imp.stack.set_visible_child(&imp.physical_page.get());
+                i18n("Physical Cores")
+            }
+            UsageMode::Logical => {
+                imp.stack.set_visible_child(&imp.logical_page.get());
+                let _ = SETTINGS.set_show_logical_cpus(true);
+                i18n("Logical Threads")
+            }
+        };
+        imp.usage_heading
+            .set_label(&i18n_f("Usage — {}", &[&label]));
+    }
+
+    fn cycle_usage_mode(&self) {
+        let mode = match self.imp().usage_mode.get() {
+            UsageMode::Total => UsageMode::Physical,
+            UsageMode::Physical => UsageMode::Logical,
+            UsageMode::Logical => UsageMode::Total,
+        };
+        self.set_usage_mode(mode);
+    }
+
     pub fn setup_signals(&self) {
         trace!("Setting up ResCPU signals…");
 
         let imp = self.imp();
-        imp.logical_switch.connect_active_notify(clone!(
-            #[weak]
-            imp,
-            move |switch| {
-                if switch.is_active() {
-                    imp.stack.set_visible_child(&imp.logical_page.get());
-                } else {
-                    imp.stack.set_visible_child(&imp.total_page.get());
+        imp.usage_heading.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_| this.cycle_usage_mode()
+        ));
+
+        let usage_click = gtk::GestureClick::new();
+        usage_click.set_button(1);
+        usage_click.connect_released(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_, presses, _, _| {
+                if presses == 1 {
+                    this.cycle_usage_mode();
                 }
-                let _ = SETTINGS.set_show_logical_cpus(switch.is_active());
             }
         ));
+        imp.stack.set_cursor_from_name(Some("pointer"));
+        imp.stack.add_controller(usage_click);
 
         glib::timeout_add_local_full(
             Duration::from_secs(1),
@@ -346,7 +457,35 @@ impl ResCPU {
             ),
         );
 
-        imp.logical_switch.set_active(SETTINGS.show_logical_cpus());
+        if SETTINGS.show_logical_cpus() {
+            self.set_usage_mode(UsageMode::Logical);
+        }
+    }
+
+    pub(in crate::ui) fn refresh_top_processes(&self, processes: &crate::utils::app::AppsContext) {
+        let rows = processes
+            .processes_iter()
+            .map(|process| {
+                let values = {
+                    let ratio = f64::from(process.cpu_time_ratio());
+                    let ratio = if SETTINGS.normalize_cpu_usage() {
+                        ratio
+                    } else {
+                        ratio * *NUM_CPUS as f64
+                    };
+                    vec![Some(ratio)]
+                };
+                ProcessRow {
+                    pid: process.data.pid,
+                    starttime: process.data.starttime,
+                    name: process.display_name.clone(),
+                    values,
+                }
+            })
+            .collect();
+        if let Some(table) = self.imp().top_table.get() {
+            table.set_rows(rows);
+        }
     }
 
     pub fn refresh_page(&self, cpu_data: &CpuData) {
@@ -390,37 +529,57 @@ impl ResCPU {
 
         imp.old_total_usage.set(new_total_usage);
 
-        if imp.logical_cpus_amount.get() > 1 {
-            for (i, old_thread_usage) in imp
-                .old_thread_usages
-                .borrow_mut()
-                .iter_mut()
-                .enumerate()
-                .take(imp.logical_cpus_amount.get())
-            {
-                let new_thread_usage = new_thread_usages
-                    .get(i)
-                    .map_or((0, 0), |i| *i.as_ref().unwrap_or(&(0, 0)));
-                let idle_thread_delta = new_thread_usage.0.saturating_sub(old_thread_usage.0);
-                let sum_thread_delta = new_thread_usage.1.saturating_sub(old_thread_usage.1);
-                let work_thread_time = sum_thread_delta.saturating_sub(idle_thread_delta);
-                let curr_threadbox = &imp.thread_graphs.borrow()[i];
-                let thread_fraction =
-                    ((work_thread_time as f64) / (sum_thread_delta as f64)).finite_or_default();
+        let mut thread_deltas = vec![(0, 0); imp.logical_cpus_amount.get()];
+        for (i, old_thread_usage) in imp.old_thread_usages.borrow_mut().iter_mut().enumerate() {
+            let thread_graphs = imp.thread_graphs.borrow();
+            let curr_threadbox = &thread_graphs[i];
+            let Some(Ok(new_thread_usage)) = new_thread_usages.get(i) else {
+                curr_threadbox.set_subtitle(&i18n("N/A"));
+                continue;
+            };
+            let idle = new_thread_usage.0.saturating_sub(old_thread_usage.0);
+            let total = new_thread_usage.1.saturating_sub(old_thread_usage.1);
+            let active = total.saturating_sub(idle);
+            thread_deltas[i] = (active, total);
+            let fraction = (active as f64 / total as f64).finite_or_default();
 
-                curr_threadbox.graph().push_data_point(thread_fraction);
-                curr_threadbox.set_subtitle(&format!("{} %", (thread_fraction * 100.0).round()));
+            curr_threadbox.graph().push_data_point(fraction);
+            curr_threadbox.set_subtitle(&format!("{} %", (fraction * 100.0).round()));
 
-                if let Some(frequency) = frequencies[i] {
-                    curr_threadbox.set_title_label(&format!(
-                        "{} · {}",
-                        &i18n_f("CPU {}", &[&(i + 1).to_string()]),
-                        &convert_frequency(frequency as f64)
-                    ));
-                } else {
-                    curr_threadbox.set_title_label(&i18n_f("CPU {}", &[&(i + 1).to_string()]));
-                }
-                *old_thread_usage = new_thread_usage;
+            let name = i18n_f("CPU {}", &[&(i + 1).to_string()]);
+            if let Some(frequency) = frequencies.get(i).copied().flatten() {
+                curr_threadbox
+                    .set_title_label(&format!("{name} · {}", convert_frequency(frequency as f64)));
+            } else {
+                curr_threadbox.set_title_label(&name);
+            }
+            *old_thread_usage = *new_thread_usage;
+        }
+
+        for core in imp.core_tiles.borrow().iter() {
+            let frequency = core
+                .threads
+                .iter()
+                .filter_map(|&id| frequencies.get(id).copied().flatten())
+                .max()
+                .map_or_else(|| i18n("N/A"), |hz| convert_frequency(hz as f64));
+            core.graph
+                .set_title_label(&format!("{} · {frequency}", core.name));
+
+            let mut active = 0;
+            let mut total = 0;
+            for &id in &core.threads {
+                let (thread_active, thread_total) = thread_deltas[id];
+                active += thread_active;
+                total += thread_total;
+            }
+            if total > 0 {
+                let fraction = active as f64 / total as f64;
+                core.graph.graph().push_data_point(fraction);
+                core.graph
+                    .set_subtitle(&format!("{:.0} %", 100.0 * fraction));
+            } else {
+                core.graph.set_subtitle(&i18n("N/A"));
             }
         }
 

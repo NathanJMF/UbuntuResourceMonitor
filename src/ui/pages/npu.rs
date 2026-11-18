@@ -9,6 +9,8 @@ use crate::utils::FiniteOr;
 use crate::utils::npu::{Npu, NpuData};
 use crate::utils::units::{convert_frequency, convert_power, convert_storage, convert_temperature};
 
+use super::top_processes::{self, Metric, ProcessRow, Ranking, TopTable};
+
 pub const TAB_ID_PREFIX: &str = "npu";
 
 mod imp {
@@ -28,6 +30,9 @@ mod imp {
     #[template(resource = "/net/nokyan/Resources/ui/pages/npu.ui")]
     #[properties(wrapper_type = super::ResNPU)]
     pub struct ResNPU {
+        #[template_child]
+        pub top_npu: TemplateChild<adw::PreferencesGroup>,
+        pub top_table: std::cell::OnceCell<TopTable>,
         #[template_child]
         pub npu_usage: TemplateChild<ResGraphBox>,
         #[template_child]
@@ -92,6 +97,8 @@ mod imp {
     impl Default for ResNPU {
         fn default() -> Self {
             Self {
+                top_npu: Default::default(),
+                top_table: Default::default(),
                 npu_usage: Default::default(),
                 memory_usage: Default::default(),
                 temperature: Default::default(),
@@ -184,6 +191,32 @@ impl ResNPU {
     }
 
     pub fn init(&self, npu: &Npu, secondary_ord: u32) {
+        let imp = self.imp();
+        imp.top_table.get_or_init(|| {
+            TopTable::new(
+                &imp.top_npu,
+                vec![
+                    Metric {
+                        title: "NPU activity",
+                        format: top_processes::percentage,
+                    },
+                    Metric {
+                        title: "Memory",
+                        format: top_processes::storage,
+                    },
+                ],
+                vec![
+                    Ranking {
+                        title: "NPU activity",
+                        value: top_processes::first,
+                    },
+                    Ranking {
+                        title: "Memory",
+                        value: top_processes::second,
+                    },
+                ],
+            )
+        });
         self.set_secondary_ord(secondary_ord);
         self.setup_widgets(npu);
     }
@@ -225,6 +258,43 @@ impl ResNPU {
 
         if let Ok(model_name) = npu.name() {
             imp.set_tab_detail_string(&model_name);
+        }
+    }
+
+    pub(in crate::ui) fn refresh_top_processes(
+        &self,
+        processes: &crate::utils::app::AppsContext,
+        slot: process_data::pci_slot::PciSlot,
+    ) {
+        let rows = processes
+            .processes_iter()
+            .map(|process| {
+                let values = {
+                    let current = process.data.npu_usage_stats.get(&slot);
+                    let previous = process.npu_usage_stats_last.get(&slot);
+                    let elapsed = process
+                        .data
+                        .timestamp
+                        .saturating_sub(process.timestamp_last);
+                    let activity = current
+                        .zip(previous)
+                        .and_then(|(current, previous)| current.usage_fraction(previous, elapsed))
+                        .map(f64::from);
+                    let memory = current
+                        .and_then(|stats| stats.mem())
+                        .map(|bytes| bytes as f64);
+                    vec![activity, memory]
+                };
+                ProcessRow {
+                    pid: process.data.pid,
+                    starttime: process.data.starttime,
+                    name: process.display_name.clone(),
+                    values,
+                }
+            })
+            .collect();
+        if let Some(table) = self.imp().top_table.get() {
+            table.set_rows(rows);
         }
     }
 

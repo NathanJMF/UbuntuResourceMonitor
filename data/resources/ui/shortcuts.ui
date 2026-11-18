@@ -29,7 +29,7 @@
         <property name="title" translatable="yes" context="shortcut window">Apps/Processes</property>
         <child>
           <object class="AdwShortcutsItem">
-            <property name="title" translatable="yes" context="shortcut window">Toggle Search Field</property>
+            <property name="title" translatable="yes" context="shortcut window">Focus Search Field</property>
             <property name="action-name">app.toggle-search</property>
           </object>
         </child>

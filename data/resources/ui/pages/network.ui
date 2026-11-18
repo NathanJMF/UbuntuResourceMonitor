@@ -2,120 +2,185 @@
 <interface>
   <template class="ResNetwork" parent="AdwBin">
     <property name="child">
-      <object class="GtkScrolledWindow">
-        <child>
-          <object class="AdwClamp">
-            <property name="maximum-size">768</property>
+      <object class="AdwBreakpointBin">
+        <property name="width-request">220</property>
+        <property name="height-request">100</property>
+        <property name="vexpand">true</property>
+        <property name="child">
+          <object class="GtkScrolledWindow">
             <child>
-              <object class="GtkBox">
-                <property name="margin-top">24</property>
-                <property name="margin-bottom">24</property>
-                <property name="margin-start">16</property>
-                <property name="margin-end">16</property>
-                <property name="spacing">24</property>
-                <property name="orientation">vertical</property>
-                <property name="hexpand">true</property>
-                <property name="valign">start</property>
-                <property name="vexpand">true</property>
+              <object class="AdwClamp">
+                <property name="maximum-size">1440</property>
+                <property name="tightening-threshold">1440</property>
                 <child>
-                  <object class="AdwPreferencesGroup">
-                    <property name="title" translatable="yes">Usage</property>
+                  <object class="GtkBox">
+                    <property name="margin-top">24</property>
+                    <property name="margin-bottom">24</property>
+                    <property name="margin-start">16</property>
+                    <property name="margin-end">16</property>
+                    <property name="spacing">24</property>
+                    <property name="orientation">vertical</property>
+                    <property name="hexpand">true</property>
+                    <property name="valign">start</property>
+                    <property name="vexpand">true</property>
                     <child>
-                      <object class="ResGraphBox" id="receiving"/>
-                    </child>
-                    <child>
-                      <object class="ResGraphBox" id="sending"/>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="total_received">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Total Received</property>
+                      <object class="GtkBox" id="hardware_columns">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">24</property>
+                        <child>
+                          <object class="GtkBox" id="details_column">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">24</property>
+                            <property name="valign">start</property>
+                            <property name="hexpand">true</property>
+                            <child>
+                              <object class="AdwPreferencesGroup">
+                                <property name="title" translatable="yes">Properties</property>
+                                <child>
+                                  <object class="AdwActionRow" id="manufacturer">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Manufacturer</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="driver">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Driver Used</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="interface">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Interface</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="hw_address">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Hardware Address</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="network_name">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Network Name</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="link">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Link</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="link_speed">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Link Speed</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwPreferencesGroup">
+                                <property name="title" translatable="yes">Transfer Totals</property>
+                                <child>
+                                  <object class="AdwActionRow" id="total_received">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Total Received</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwActionRow" id="total_sent">
+                                    <style>
+                                      <class name="property"/>
+                                    </style>
+                                    <property name="subtitle-selectable">true</property>
+                                    <property name="title" translatable="yes">Total Sent</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox" id="charts_column">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">24</property>
+                            <property name="valign">start</property>
+                            <property name="hexpand">true</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="vexpand">true</property>
+                                <property name="spacing">12</property>
+                                <property name="orientation">vertical</property>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="xalign">0</property>
+                                    <property name="label" translatable="yes">Usage</property>
+                                    <style>
+                                      <class name="heading"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="ResGraphBox" id="receiving">
+                                    <property name="vexpand">true</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="ResGraphBox" id="sending">
+                                    <property name="vexpand">true</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="AdwActionRow" id="total_sent">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Total Sent</property>
-                      </object>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="AdwPreferencesGroup">
-                    <property name="title" translatable="yes">Properties</property>
-                    <child>
-                      <object class="AdwActionRow" id="manufacturer">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Manufacturer</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="driver">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Driver Used</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="interface">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Interface</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="hw_address">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Hardware Address</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="network_name">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Network Name</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="link">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Link</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwActionRow" id="link_speed">
-                        <style>
-                          <class name="property"/>
-                        </style>
-                        <property name="subtitle-selectable">true</property>
-                        <property name="title" translatable="yes">Link Speed</property>
+                      <object class="AdwPreferencesGroup" id="top_network">
+                        <property name="title" translatable="yes">Top Network Processes</property>
+                        <property name="description" translatable="yes">TCP rates for processes visible to this app, matched to this interface by local address. UDP and QUIC are excluded.</property>
                       </object>
                     </child>
                   </object>
                 </child>
               </object>
             </child>
+          </object>
+        </property>
+        <child>
+          <object class="AdwBreakpoint">
+            <condition>min-width: 960sp</condition>
+            <setter object="hardware_columns" property="orientation">horizontal</setter>
+            <setter object="details_column" property="hexpand">false</setter>
+            <setter object="details_column" property="width-request">320</setter>
+            <setter object="charts_column" property="valign">fill</setter>
           </object>
         </child>
       </object>

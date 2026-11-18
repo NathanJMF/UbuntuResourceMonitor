@@ -3,7 +3,18 @@ progressbar.slim > trough, progressbar.slim > trough > progress {
 }
 
 .resources-columnview {
-  background-color: @window_bg_color;
+  background-color: var(--window-bg-color);
+}
+
+.resources-columnview listview > row:nth-child(odd):not(:selected):not(:hover),
+.resource-process-table listview > row:nth-child(odd):not(:selected):not(:hover) {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--resource-row-stripe, alpha(currentColor, 0.045)) 0px,
+    var(--resource-row-stripe, alpha(currentColor, 0.045)) 1px,
+    transparent 1px,
+    transparent 5px
+  );
 }
 
 .bubble {
@@ -24,6 +35,47 @@ progressbar.slim > trough, progressbar.slim > trough > progress {
   border-radius: 4px;
 }
 
+.card.resource-process-table {
+  background-color: var(--view-bg-color);
+}
+
+.resource-process-table > columnview {
+  background-color: transparent;
+}
+
+.resource-process-table header > button:first-child label:dir(ltr),
+.resource-process-table header > button:last-child label:dir(rtl) {
+  margin-left: 10px;
+}
+
+.resource-process-table header > button:last-child label:dir(ltr),
+.resource-process-table header > button:first-child label:dir(rtl) {
+  margin-right: 10px;
+}
+
+.resource-graph-card {
+  padding: 12px;
+}
+
+.resource-graph-card.compact-cpu {
+  padding: 6px;
+}
+
+.cpu-usage-grid > flowboxchild {
+  padding: 0;
+}
+
 .graph {
   border-radius: 8px;
+}
+
+window.resources-dark {
+  --resource-row-stripe: alpha(currentColor, 0.065);
+  --window-bg-color: #222223;
+  --view-bg-color: #1c1c1d;
+  --headerbar-bg-color: #242425;
+  --headerbar-backdrop-color: #222223;
+  --sidebar-bg-color: #29292b;
+  --sidebar-backdrop-color: #262628;
+  --card-bg-color: #303032;
 }

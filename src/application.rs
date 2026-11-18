@@ -112,13 +112,13 @@ impl Application {
         ));
         self.add_action(&action_quit);
 
-        // Toggle Search
+        // Focus Search
         let action_search = gio::SimpleAction::new("toggle-search", None);
         action_search.connect_activate(clone!(
             #[weak(rename_to = this)]
             self,
             move |_, _| {
-                this.main_window().shortcut_toggle_search();
+                this.main_window().shortcut_focus_search();
             }
         ));
         self.add_action(&action_search);

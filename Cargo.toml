@@ -31,6 +31,7 @@ neli-wifi = { version = "0.6.1", features = ["default"] }
 nix = { version = "0.31.2", default-features = false, features = [
     "signal",
     "sched",
+    "net",
 ] }
 num_cpus = "1.17.0"
 nvml-wrapper = "0.12.0"

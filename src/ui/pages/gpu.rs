@@ -10,6 +10,8 @@ use crate::utils::FiniteOr;
 use crate::utils::gpu::{Gpu, GpuData};
 use crate::utils::units::{convert_frequency, convert_power, convert_storage, convert_temperature};
 
+use super::top_processes::{self, Metric, ProcessRow, Ranking, TopTable};
+
 pub const TAB_ID_PREFIX: &str = "gpu";
 
 mod imp {
@@ -32,6 +34,9 @@ mod imp {
     #[template(resource = "/net/nokyan/Resources/ui/pages/gpu.ui")]
     #[properties(wrapper_type = super::ResGPU)]
     pub struct ResGPU {
+        #[template_child]
+        pub top_gpu: TemplateChild<adw::PreferencesGroup>,
+        pub top_table: std::cell::OnceCell<TopTable>,
         #[template_child]
         pub gpu_usage: TemplateChild<ResGraphBox>,
         #[template_child]
@@ -100,6 +105,8 @@ mod imp {
     impl Default for ResGPU {
         fn default() -> Self {
             Self {
+                top_gpu: Default::default(),
+                top_table: Default::default(),
                 gpu_usage: Default::default(),
                 encode_decode_usage: Default::default(),
                 encode_decode_combined_usage: Default::default(),
@@ -194,6 +201,32 @@ impl ResGPU {
     }
 
     pub fn init(&self, gpu: &Gpu, secondary_ord: u32) {
+        let imp = self.imp();
+        imp.top_table.get_or_init(|| {
+            TopTable::new(
+                &imp.top_gpu,
+                vec![
+                    Metric {
+                        title: "GPU activity",
+                        format: top_processes::percentage,
+                    },
+                    Metric {
+                        title: "Video memory",
+                        format: top_processes::storage,
+                    },
+                ],
+                vec![
+                    Ranking {
+                        title: "GPU activity",
+                        value: top_processes::first,
+                    },
+                    Ranking {
+                        title: "Video memory",
+                        value: top_processes::second,
+                    },
+                ],
+            )
+        });
         self.set_secondary_ord(secondary_ord);
         self.setup_widgets(gpu);
     }
@@ -265,6 +298,43 @@ impl ResGPU {
 
         if let Ok(model_name) = gpu.name() {
             imp.set_tab_detail_string(&model_name);
+        }
+    }
+
+    pub(in crate::ui) fn refresh_top_processes(
+        &self,
+        processes: &crate::utils::app::AppsContext,
+        gpu: GpuIdentifier,
+    ) {
+        let rows = processes
+            .processes_iter()
+            .map(|process| {
+                let values = {
+                    let current = process.data.gpu_usage_stats.get(&gpu);
+                    let previous = process.gpu_usage_stats_last.get(&gpu);
+                    let elapsed = process
+                        .data
+                        .timestamp
+                        .saturating_sub(process.timestamp_last);
+                    let activity = current
+                        .zip(previous)
+                        .and_then(|(current, previous)| current.gfx_fraction(previous, elapsed))
+                        .map(f64::from);
+                    let memory = current
+                        .and_then(|stats| stats.mem())
+                        .map(|bytes| bytes as f64);
+                    vec![activity, memory]
+                };
+                ProcessRow {
+                    pid: process.data.pid,
+                    starttime: process.data.starttime,
+                    name: process.display_name.clone(),
+                    values,
+                }
+            })
+            .collect();
+        if let Some(table) = self.imp().top_table.get() {
+            table.set_rows(rows);
         }
     }
 
